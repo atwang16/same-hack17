@@ -109,6 +109,44 @@ class PuzzleSolver():
         cy = int(M['m01'] / M['m00'])
         return cx, cy
 
+    def rotate_image(self, img, desired_center, angle_deg, final_dim):
+        """
+        Rotate an image by a specified angle, translate to desired center, and crop to desired dimension.
+
+        :param img: image file, in the form of a numpy array
+        :param desired_center: the desired coordinates for the COM of the image
+        :param angle_deg: the angle (in degrees) over which to rotate the image
+        :param final_dim: the final dimensions of the returned image
+        :return: an image with the specified transformations
+        """
+        cx, cy = self.get_com(img)
+        M = cv2.getRotationMatrix2D((cx, cy), angle_deg, 1.0)
+        rotated = cv2.warpAffine(img, M,
+                                 (final_dim[1], final_dim[0]))  # not sure why it has to be reversed, but it does
+        cx_new, cy_new = self.get_com(rotated)
+        delta = (desired_center[0] - cx_new, desired_center[1] - cy_new)
+        translated = cv2.warpAffine(rotated, np.float32([[1, 0, delta[0]], [0, 1, delta[1]]]),
+                                    (final_dim[1], final_dim[0]))
+        return translated
+
+    def apply_mask(self, img_front, img_back):
+        min_score = np.inf
+        best_img_back = None
+
+        for a in range(0, 360, 1):
+            cx_f, cy_f = self.get_com(img_front)
+            cx_b, cy_b = self.get_com(img_back)
+            img_back_rot = self.rotate_image(img_back, (cx_f, cy_f), a, img_front.shape)
+
+            overlay = img_front ^ img_back_rot
+            xor_sum = np.sum(overlay)
+            if xor_sum < min_score:
+                min_score = xor_sum
+                best_img_back = img_back_rot
+
+        cv2.imshow("overlay", best_img_back ^ img_front)
+        cv2.waitKey(0)
+
     def get_convexity(self, img, visualize=False):
         np.set_printoptions(threshold=np.nan)
         """Returns convexity of each edge from top edge going clockwise.
@@ -117,7 +155,7 @@ class PuzzleSolver():
         0 = concave
         -1 = edge
         """
-        edges = get_edges(get_back_binary_image(img))
+        edges = self.get_edges(self.get_back_binary_image(img))
         # edges = get_edges(img)
 
         if visualize:
@@ -125,7 +163,7 @@ class PuzzleSolver():
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        tl, tr, br, bl = get_corners(img)
+        tl, tr, br, bl = self.get_corners(img)
 
         top_edge = int((tl[1] + tr[1]) / 2)
         bottom_edge = int((br[1] + bl[1]) / 2)
