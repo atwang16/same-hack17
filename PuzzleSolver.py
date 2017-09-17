@@ -18,12 +18,15 @@ def get_edges_test():
         cv2.imshow('test', img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
+
 def match_colors_test():
 	img1 = cv2.imread('samples/sample1/NWpiece.jpeg')
 	height1, width1 = len(img1), len(img1[0])
 	img2 = cv2.imread('samples/sample1/SWpiece.jpeg')
         height2, width2 = len(img2), len(img2[0])
-	
+
+
 	def bin_colors(pixels):
 		bintransform=np.zeros((15, 15, 15))
 		size=len(pixels)
@@ -44,6 +47,51 @@ def match_colors_test():
 	edges1=[np.reshape(bin_colors(img1[height1-1]), -1), np.reshape(bin_colors(img1[0]), -1), np.reshape(bin_colors(img1[:, width1 - 1]), -1), np.reshape(bin_colors(img1[:, 0]), -1)]
 	edges2=[np.reshape(bin_colors(img2[height2-1]), -1), np.reshape(bin_colors(img2[0]), -1), np.reshape(bin_colors(img2[:, width2 - 1]), -1), np.reshape(bin_colors(img2[:, 0]), -1)]
 	print(distance.cdist(edges1, edges2))
+
+
+def get_front_binary_image(img):
+    """
+    TODO: write description
+
+    :param img: an image with a white background
+    :return:
+    """
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # convert from color to grayscale
+    img_gray_gauss = cv2.GaussianBlur(img_gray, (5, 5), 0) # apply Gaussian blur
+    th, img_gray_thresh = cv2.threshold(img_gray_gauss, 245, 255, cv2.THRESH_BINARY) # threshold image so relevant part becomes black
+    return cv2.bitwise_not(img_gray_thresh)
+
+
+def get_back_binary_image(img):
+    """
+    TODO: write description
+
+    :param img: an image with a white background
+    :return:
+    """
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # convert from color to grayscale
+    img_gray_gauss = cv2.GaussianBlur(img_gray, (5, 5), 0) # apply Gaussian blur
+    th, img_gray_thresh = cv2.threshold(img_gray_gauss, 100, 255, cv2.THRESH_BINARY) # threshold image so relevant part becomes black
+    return cv2.flip(img_gray_thresh, 1)
+
+
+def get_edges(bin_img):
+    return cv2.Canny(bin_img, 60, 100)
+
+
+def get_com(img):
+    """
+    Get center of mass (i.e. intensity) of image.
+
+    :param img:
+    :return:
+    """
+    M = cv2.moments(img)
+    cx = int(M['m10'] / M['m00'])
+    cy = int(M['m01'] / M['m00'])
+    return cx, cy
+
+
 class PuzzleSolver():
 	def __init__(self):
 		self.pieces = list()
