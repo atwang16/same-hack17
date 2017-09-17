@@ -3,12 +3,19 @@ import math, cv2, sys, glob
 
 class PuzzleSolver():
     def __init__(self):
-        self.pieces = list()
+        # Color images
+        self.front_images = list()
+        self.back_images = list()
+        # B/W binary images
+        self.front_binary_images = list()
+        self.back_binary_images = list()
+
         self.corners = list()
         self.piece_dim = list()
         self.convex_edges = list()
         self.concave_edges = list()
         self.straight_edges = list()
+        self.color_descriptors = list()
 
     def import_pieces(self, path_to_pieces):
         front_files = sorted(glob.glob(path_to_pieces + '/*_front.jpg'))
@@ -225,6 +232,78 @@ class PuzzleSolver():
             bottom = corners[2][0] - corners[3][0]
             left = corners[3][1] - corners[0][1]
         self.piece_dim.extend([top, right, bottom, left])
+
+    def get_color_histogram(self, side):
+        nbins = 15
+        bintransform = np.zeros((nbins, nbins, nbins))
+        for i in range(len(side)):
+            pixel = side[i]
+            blue = int(math.ceil(pixel[0] / float(255 / nbins))) - 1
+            green = int(math.ceil(pixel[1] / float(255 / nbins))) - 1
+            red = int(math.ceil(pixel[2] / float(255 / nbins))) - 1
+            bintransform[blue, green, red] += 1
+        return bintransform
+
+    def get_color_descriptors(self, img_front_co, img_front_bw, img_back_bw, corners):
+        """
+        Returns a list of four color descriptors representing the color patterns of each of
+        the four edges, extracted by applying a mask of the back of the puzzle piece to the
+        front and using the pixels on the boundary to create a histogram description.
+
+        :param img_front_co: The front of the image in color, represented by a numpy array.
+        :param img_front_bw: The front of the image in black and white, represented by a numpy array.
+        :param img_back_bw: The back of the image in black and white, represented by a numpy array.
+        :param corners: The four corners of the base shape of the puzzle piece.
+        :return: a list of four numpy arrays which are mathematical descriptors of the color patterns of each side of the puzzle piece.
+        """
+        mask, angle, trans = self.apply_mask(img_front_bw, img_back_bw)
+        mask_edge = self.get_edges(mask)
+        mask_edge = mask_edge[:, :, np.newaxis] # add a third dimension for broadcasting
+        img_front_boundary = mask_edge & img_front_co
+
+        angle *= np.pi / 180 # convert to radians
+        corners = np.concatenate((corners, np.ones((4, 1))), axis=1)
+        H = np.array([np.cos(angle), -np.sin(angle), trans[0]],
+                     [np.sin(angle),  np.cos(angle), trans[1]])
+        tf_corners = corners * H.T
+        tl = (tf_corners[0, 0], tf_corners[0, 1])
+        tr = (tf_corners[1, 0], tf_corners[1, 1])
+        br = (tf_corners[2, 0], tf_corners[2, 1])
+        bl = (tf_corners[3, 0], tf_corners[3, 1])
+
+        def tlbr_diagonal(x, y):
+            m = (tl[1] - br[1]) / (tl[0] - br[0])
+            return m * (x - tl[0]) + (tl[1] - y)
+
+        def trbl_diagonal(x, y):
+            m = (tr[1] - bl[1]) / (tr[0] - bl[0])
+            return m * (x - tr[0]) + (tr[1] - y)
+
+        sides = [[] for _ in range(4)]
+
+        for x in xrange(img_front_boundary.shape[0]):
+            for y in xrange(img_front_boundary.shape[1]):
+                c = list(img_front_boundary[x, y, :])
+                if c != [0, 0, 0]:
+                    t1 = tlbr_diagonal(x, y)
+                    t2 = trbl_diagonal(x, y)
+                    if t1 >= 0 and t2 >= 0:
+                        sides[0].append(c)
+                    elif t1 >= 0 and t2 < 0:
+                        sides[1].append(c)
+                    elif t1 < 0 and t2 < 0:
+                        sides[2].append(c)
+                    else:
+                        sides[3].append(c)
+
+        return [np.reshape(self.get_color_histogram(sides[0]), -1),
+                np.reshape(self.get_color_histogram(sides[1]), -1),
+                np.reshape(self.get_color_histogram(sides[2]), -1),
+                np.reshape(self.get_color_histogram(sides[3]), -1)]
+
+    def get_all_descriptors(self):
+        for i in range(self.num_pieces)
+        self.color_descriptors
 
 if __name__ == '__main__':
     pass
