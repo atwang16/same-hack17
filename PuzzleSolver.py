@@ -18,6 +18,14 @@ class PuzzleSolver():
         self.color_descriptors = list()
 
     def import_pieces(self, path_to_pieces):
+        """
+        Runs methods to import all images and preprocess them, including determining the convexity of each side,
+        finding corners, calculating piece dimensions, and computing color descriptors.
+
+        :param path_to_pieces: path to directory containing images of puzzle pieces. Pieces must end in '_front.jpg'
+        or '_back.jpg,' with the first part of the filename identical for the same piece.
+        :return: None
+        """
         front_files = sorted(glob.glob(path_to_pieces + '/*_front.jpg'))
         back_files = sorted(glob.glob(path_to_pieces + '/*_back.jpg'))
 
@@ -34,12 +42,15 @@ class PuzzleSolver():
         self.get_all_piece_dimensions()
         self.get_all_descriptors()
 
+        return None
+
     def get_front_binary_image(self, img):
         """
-        TODO: write description
+        Processes a front image of a puzzle piece to form a binary image (white puzzle piece, black background) through
+        a Gaussian blur and binary threshold.
 
-        :param img: an image with a white background
-        :return:
+        :param img: an image of the front of a puzzle piece with a white background, in numpy array format
+        :return: a binary image with a white puzzle piece and black background
         """
         img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # convert from color to grayscale
         img_gray_gauss = cv2.GaussianBlur(img_gray, (5, 5), 0) # apply Gaussian blur
@@ -48,10 +59,11 @@ class PuzzleSolver():
 
     def get_back_binary_image(self, img):
         """
-        TODO: write description
+        Processes a back image of a puzzle piece to form a binary image (white puzzle piece, black background) through
+        a Gaussian blur and binary threshold.
 
-        :param img: an image with a white background
-        :return:
+        :param img: an image of the back of a puzzle piece with a black background, in numpy array format
+        :return: a binary image with a white puzzle piece and black background
         """
         img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # convert from color to grayscale
         img_gray_gauss = cv2.GaussianBlur(img_gray, (5, 5), 0) # apply Gaussian blur
@@ -59,16 +71,22 @@ class PuzzleSolver():
         return cv2.flip(img_gray_thresh, 1)
 
     def get_edges(self, bin_img):
+        """
+        Runs an edge detection routine on an image based on the Canny edge detector.
+
+        :param bin_img: a binary image in numpy array format
+        :return: the edges of a binary image, in numpy array format
+        """
         return cv2.Canny(bin_img, 60, 100)
 
-    def get_com(self, img):
+    def get_com(self, bin_img):
         """
-        Get center of mass (i.e. intensity) of image.
+        Get center of mass (i.e. intensity) of image using moments.
 
-        :param img:
-        :return:
+        :param bin_img: a binary image in numpy array format
+        :return: the coordinates of the center of mass, as a tuple
         """
-        M = cv2.moments(img)
+        M = cv2.moments(bin_img)
         cx = int(M['m10'] / M['m00'])
         cy = int(M['m01'] / M['m00'])
         return cx, cy
@@ -93,17 +111,27 @@ class PuzzleSolver():
                                     (final_dim[1], final_dim[0]))
         return translated, (desired_center[0] - cx, desired_center[1] - cy)
 
-    def apply_mask(self, img_front, img_back):
+    def apply_mask(self, front_bin_img, back_bin_img):
+        """
+        Applies mask of back image to front image of puzzle piece in order to provide a more distinct edge to the piece.
+        The mask is applied by aligning the center of masses of the front and back and then minimizing the sum of the XORs
+        of the two images overlaid on each other (i.e. minimizing the amount of non-overlap), over a discretized range of
+        possible angles. Accuracy in selecting the angle is guaranteed within a 1 degree margin.
+
+        :param front_bin_img: a binary image of the front of a puzzle piece, in numpy array format
+        :param back_bin_img: a binary image of the back of a puzzle piece, in numpy array format
+        :return: the best transformed version of the back image, the associated angle, and the associated translation
+        """
         min_score = np.inf
         best_img_back = None
         best_angle = None
         best_delta = None
 
         for a in range(0, 360, 1):
-            cx_f, cy_f = self.get_com(img_front)
-            img_back_rot, delta = self.rotate_image(img_back, (cx_f, cy_f), a, img_front.shape)
+            cx_f, cy_f = self.get_com(front_bin_img)
+            img_back_rot, delta = self.rotate_image(back_bin_img, (cx_f, cy_f), a, front_bin_img.shape)
 
-            overlay = img_front ^ img_back_rot
+            overlay = front_bin_img ^ img_back_rot
             xor_sum = np.sum(overlay)
             if xor_sum < min_score:
                 min_score = xor_sum
@@ -115,12 +143,13 @@ class PuzzleSolver():
     
     def get_corners(self, img, visualize=False):
             """
-            Detects the corners of the puzzle piece.
+            Detects the corners of the puzzle piece using a corner detection algorithm.
 
-            RETURN
-            A list of python lists of the x and y coordinates beginning with the top-left and going clockwise
+            :param img: a (binary) grayscale image in numpy array format
+            :param visualize: an optional parameter to visualize the locations of the corners
+            :return: A list of python lists of the x and y coordinates beginning with the top-left and going clockwise
             """
-            # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
             gray = np.float32(img)
             gray = cv2.GaussianBlur(gray,(3,3),0)
             # _, gray = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY)
@@ -157,21 +186,29 @@ class PuzzleSolver():
 
             return [tl, tr, br, bl]
     
-    def get_convexity(self, binary_img, visualize=False):
-        """Returns convexity of each edge from top edge going clockwise.
+    def get_convexity(self, bin_img, visualize=False):
+        """
+        Returns convexity of each edge (concave, convex, or straight) from top edge going clockwise, which will be one
+        of the heuristics used to determine whether the sides of two puzzle pieces can match up.
+
+        :param bin_img: a binary image, in the form of a numpy array
+        :param visualize: an optional parameter to vizualize the results
+        :return: the convexities of each side of a puzzle piece
+        """
+        """
 
         1 = convex
         0 = concave
         -1 = edge
         """
-        edges = self.get_edges(binary_img)
+        edges = self.get_edges(bin_img)
 
         if visualize:
             cv2.imshow('image', edges)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        tl, tr, br, bl = self.get_corners(binary_img)
+        tl, tr, br, bl = self.get_corners(bin_img)
 
         top_edge = int((tl[1] + tr[1]) / 2)
         bottom_edge = int((br[1] + bl[1]) / 2)
@@ -215,6 +252,12 @@ class PuzzleSolver():
         return convexity
 
     def sort_convexities(self):
+        """
+        A wrapper function to sort the sides of the puzzle pieces by convexity (convex, concave, or straight).
+        Each Python list stores the indices of the corresponding sides.
+
+        :return: None
+        """
         for index, piece in enumerate(self.back_binary_images):
             convexities = self.get_convexity(piece)
             for edge_index, edge_status in enumerate(convexities):
@@ -224,12 +267,24 @@ class PuzzleSolver():
                     self.convex_edges.append(index * 4 + edge_index)
                 else:
                     self.straight_edges.append(index * 4 + edge_index)
+        return None
 
     def get_all_corners(self):
+        """
+        A wrapper function to compute corners for every puzzle piece.
+
+        :return: None
+        """
         for image in self.back_binary_images:
             self.corners.extend(self.get_corners(image))
+        return None
 
     def get_all_piece_dimensions(self):
+        """
+        Approximates and stores the length of each side using the corners identified for each puzzle piece.
+
+        :return: None
+        """
         for i in range(self.num_pieces):
             corners = self.corners[i * 4:i * 4 + 4]
             top = corners[1][0] - corners[0][0]
@@ -237,8 +292,17 @@ class PuzzleSolver():
             bottom = corners[2][0] - corners[3][0]
             left = corners[3][1] - corners[0][1]
         self.piece_dim.extend([top, right, bottom, left])
+        return None
 
     def get_color_histogram(self, side):
+        """
+        Given a side of a puzzle piece, represented by a list of pixel colors, a descriptor is returned in the form of
+        a 3D color histogram to allow for comparison of color patterns between the edges of different puzzle pieces.
+
+        :param side: a Python list of lists of RGB colors (in the order BGR), representing the colors of all of the edge
+        pixels along a particular side of a puzzle piece.
+        :return: a 3D numpy array storing the histogram counts of the pixels along the side.
+        """
         nbins = 15
         bintransform = np.zeros((nbins, nbins, nbins))
         for i in range(len(side)):
@@ -247,6 +311,7 @@ class PuzzleSolver():
             green = int(math.ceil(pixel[1] / float(255 / nbins))) - 1
             red = int(math.ceil(pixel[2] / float(255 / nbins))) - 1
             bintransform[blue, green, red] += 1
+            # TODO: implement normalization here
         return bintransform
 
     def get_color_descriptors(self, img_front_co, img_front_bw, img_back_bw, visualize=False):
