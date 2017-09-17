@@ -66,8 +66,9 @@ class PuzzleSolver():
         :return: a binary image with a white puzzle piece and black background
         """
         img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # convert from color to grayscale
-        img_gray_gauss = cv2.GaussianBlur(img_gray, (5, 5), 0) # apply Gaussian blur
-        th, img_gray_thresh = cv2.threshold(img_gray_gauss, 90, 255, cv2.THRESH_BINARY) # threshold image so relevant part becomes black
+        img_gray_gauss = cv2.GaussianBlur(img_gray, (21, 21), 0) # apply Gaussian blur
+        th, img_gray_thresh = cv2.threshold(img_gray_gauss, 200, 255, cv2.THRESH_BINARY) # threshold image so relevant part becomes black
+        img_gray_thresh = cv2.bitwise_not(img_gray_thresh)
         return cv2.flip(img_gray_thresh, 1)
 
     def get_edges(self, bin_img):
@@ -141,7 +142,7 @@ class PuzzleSolver():
 
         return best_img_back, best_angle, best_delta
     
-    def get_corners(self, img, visualize=False):
+    def get_corners(self, img, visualize=True):
             """
             Detects the corners of the puzzle piece using a corner detection algorithm.
 
@@ -162,7 +163,7 @@ class PuzzleSolver():
                 x, y = i.ravel()
                 corner_list.append([x, y])
                 if visualize:
-                    cv2.circle(img, (x, y), 3, 255, -1)
+                    cv2.circle(img, (x, y), 3, (128, 0, 0), -1)
             if visualize:
                 cv2.imshow("image", img)
                 cv2.waitKey(0)
@@ -291,7 +292,7 @@ class PuzzleSolver():
             right = corners[2][1] - corners[1][1]
             bottom = corners[2][0] - corners[3][0]
             left = corners[3][1] - corners[0][1]
-        self.piece_dim.extend([top, right, bottom, left])
+            self.piece_dim.extend([top, right, bottom, left])
         return None
 
     def get_color_histogram(self, side):
@@ -330,8 +331,8 @@ class PuzzleSolver():
 
         mask, angle, trans = self.apply_mask(img_front_bw, img_back_bw)
         mask_edge = self.get_edges(mask)
-        mask_edge = mask_edge[:, :, np.newaxis] # add a third dimension for broadcasting
-        img_front_boundary = mask_edge & img_front_co
+        mask_edge_3ch = mask_edge[:, :, np.newaxis] # add a third dimension for broadcasting
+        img_front_boundary = mask_edge_3ch & img_front_co
 
         corners = self.get_corners(mask)
         tl = tuple(corners[0])
@@ -361,7 +362,7 @@ class PuzzleSolver():
 
         sides = [[] for _ in range(4)]
 
-        _, contours, _ = cv2.findContours(mask_edge, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        mask_edge, contours, _ = cv2.findContours(mask_edge, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
         dist = [np.inf for _ in range(4)]
         corner_ind = [-1 for _ in range(4)]
@@ -392,6 +393,42 @@ class PuzzleSolver():
         for i in range(self.num_pieces):
             self.color_descriptors.extend(self.get_color_descriptors(self.front_images[i], self.front_binary_images[i],
                                                                      self.back_binary_images[i]))
+
+    def is_same_piece(self, ind_1, ind_2):
+        """Test if two edges are on the same piece"""
+        # int division
+        return ind_1 / 4 == ind_2 / 4
+
+    def edge_len_match(self, ind_1, ind_2):
+        """Test if two edge lengths are close enough"""
+        return abs(self.piece_dim[ind_1] - self.piece_dim[ind_2]) < 30
+
+    def solve(self):
+        """The magic function that solves the puzzle"""
+        edges = list()
+        for convex_edge in self.convex_edges:
+            for concave_edge in self.concave_edges:
+                if not self.is_same_piece(convex_edge, concave_edge) and self.edge_len_match(convex_edge, concave_edge):
+                    # print(self.color_descriptors[convex_edge])
+                    # print(self.color_descriptors[concave_edge])
+                    color_dist = np.linalg.norm(self.color_descriptors[convex_edge] - self.color_descriptors[concave_edge])
+                    # color_dist = distance.cdist([np.reshape(bin_colors(edges[i]))],[np.reshape(bin_colors(edges[j]))])[0][0] # MIGHT NEED TO REPLACE WITH NUMPY
+                    edges.append((convex_edge, concave_edge, color_dist))
+        
+        # Sort valid edges by smallest edge distance
+        edges = sorted(edges, key=lambda x: x[2])
+
+        # Generate steps (the n most-likely non-contradictory combinations)
+        used_edges = set()
+        steps = list()
+        num_steps = self.num_pieces
+        for step in range(num_steps):
+            edge_1, edge_2, _ = edges[step]
+            if edge_1 not in used_edges and edge_2 not in used_edges:
+                steps.append((edge_1, edge_2))
+                used_edges.add(edge_1)
+                used_edges.add(edge_2)
+        return steps
 
 if __name__ == '__main__':
     pass
