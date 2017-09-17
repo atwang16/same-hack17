@@ -1,7 +1,49 @@
-import numpy as np 
+import numpy as np
+import scipy.spatial.distance as distance
+import math
 import cv2
 import sys
 
+def get_edges_test():
+        """Takes an image and gives an array same dimension as image that has 1 if
+        edge, 0 if not for each pixel."""
+        img = cv2.imread('samples/sample1/NWpiece.jpeg')
+
+        lowThreshold = 30
+        ratio = 3
+        kernel_size = 3
+        gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+        img = cv2.GaussianBlur(gray,(3,3),6)
+        img = cv2.Canny(img,lowThreshold,lowThreshold*ratio,apertureSize = kernel_size)
+        cv2.imshow('test', img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+def match_colors_test():
+	img1 = cv2.imread('samples/sample1/NWpiece.jpeg')
+	height1, width1 = len(img1), len(img1[0])
+	img2 = cv2.imread('samples/sample1/SWpiece.jpeg')
+        height2, width2 = len(img2), len(img2[0])
+	
+	def bin_colors(pixels):
+		bintransform=np.zeros((15, 15, 15))
+		size=len(pixels)
+		for i in range(size):
+			pixel=pixels[i]
+			blue=int(math.ceil(pixel[0]/float(17))) - 1 
+			green=int(math.ceil(pixel[1]/float(17))) - 1
+			red=int(math.ceil(pixel[2]/float(17))) -1
+#			if pixel[0] > 254  or pixel[1] > 254 or pixel[2] > 254:
+#				print(blue, green, red)
+#				print(bintransform[blue, green, red])
+			bintransform[blue, green, red] += 1
+		return bintransform
+	bin_colors(img1[height1-1])	
+	edges=((bin_colors(img1[height1-1]), 1),(bin_colors(img2[height2-1]), 2),(bin_colors(img1[:, width1-1]), 1),(bin_colors(img2[:, width2-1]), 2),(bin_colors(img1[0]), 1),(bin_colors(img2[0]), 2), (bin_colors(img1[:, 0]), 1),(bin_colors(img2[:, 0]), 2))
+#	print(edges[0][0])
+	print(distance.cdist([np.reshape(edges[0][0], -1)], [np.reshape(edges[1][0], -1)]))
+	edges1=[np.reshape(bin_colors(img1[height1-1]), -1), np.reshape(bin_colors(img1[0]), -1), np.reshape(bin_colors(img1[:, width1 - 1]), -1), np.reshape(bin_colors(img1[:, 0]), -1)]
+	edges2=[np.reshape(bin_colors(img2[height2-1]), -1), np.reshape(bin_colors(img2[0]), -1), np.reshape(bin_colors(img2[:, width2 - 1]), -1), np.reshape(bin_colors(img2[:, 0]), -1)]
+	print(distance.cdist(edges1, edges2))
 class PuzzleSolver():
 	def __init__(self):
 		self.pieces = list()
@@ -51,9 +93,13 @@ class PuzzleSolver():
 
 	return tl, tr, br, bl
 
+	def import_pieces(self, path_to_pieces):
+		pass
+
 	def preprocess_pieces(self):
 		"""Detect the edges of the puzzle piece and remove background"""
 		pass
 
 if __name__ == '__main__':
-	pass
+# 	get_edges_test()
+	match_colors_test()
