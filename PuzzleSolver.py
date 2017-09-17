@@ -24,9 +24,25 @@ def match_colors_test():
     img1 = cv2.imread('samples/sample1/NWpiece.jpeg')
     height1, width1 = len(img1), len(img1[0])
     img2 = cv2.imread('samples/sample1/SEpiece.jpeg')
-        height2, width2 = len(img2), len(img2[0])
+    height2, width2 = len(img2), len(img2[0])
+
+
 
     images = (cv2.imread('samples/sample1/NWpiece.jpeg'), cv2.imread('samples/sample1/NEpiece.jpeg'), cv2.imread('samples/sample1/SWpiece.jpeg'), cv2.imread('samples/sample1/SEpiece.jpeg'))
+
+    def bin_colors(pixels):
+        bintransform=np.zeros((15, 15, 15))
+        size=len(pixels)
+        for i in range(size):
+            pixel=pixels[i]
+            blue=int(math.ceil(pixel[0]/float(17))) - 1 
+            green=int(math.ceil(pixel[1]/float(17))) - 1
+            red=int(math.ceil(pixel[2]/float(17))) -1
+#           if pixel[0] > 254  or pixel[1] > 254 or pixel[2] > 254:
+#               print(blue, green, red)
+#               print(bintransform[blue, green, red])
+            bintransform[blue, green, red] += 1
+        return bintransform
 
     edgesfinal=[np.reshape(bin_colors(img1[height1-1]), -1), np.reshape(bin_colors(img1[0]), -1), np.reshape(bin_colors(img1[:, width1 - 1]), -1), np.reshape(bin_colors(img1[:, 0]), -1), np.reshape(bin_colors(img2[height2-1]), -1), np.reshape(bin_colors(img2[0]), -1), np.reshape(bin_colors(img2[:, width2 - 1]), -1), np.reshape(bin_colors(img2[:, 0]), -1)]
     sixteenedges = [[0 for t in range(4*len(images))] for s in range(4*len(images))]
