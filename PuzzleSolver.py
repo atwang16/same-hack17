@@ -3,7 +3,13 @@ import math, cv2, sys, glob
 
 class PuzzleSolver():
     def __init__(self):
-        self.pieces = list()
+        # Color images
+        self.front_images = list()
+        self.back_images = list()
+        # B/W binary images
+        self.front_binary_images = list()
+        self.back_binary_images = list()
+
         self.corners = list()
         self.piece_dim = list()
         self.convex_edges = list()
